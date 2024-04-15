@@ -12,7 +12,7 @@ esp-backtrace = { version = "0.11.0", features = [
     "panic-handler",
     "println",
 ] }
-esp-hal = { version = "0.16.0", features = [ "esp32c3" ] }
+esp-hal = { version = "0.16.0", features = ["esp32c3", "eh1"] }
 esp-println = { version = "0.9.0", features = ["esp32c3", "log"] }
 log = { version = "0.4.20" }
 embedded-svc = { version = "0.26.1", default-features = false, features = [] }
@@ -35,13 +35,16 @@ smoltcp = { version = "0.11.0", default-features = false, features = [
     "socket-tcp",
     "socket-udp",
 ] }
+fugit = "0.3.7"
+embedded-hal = "1.0.0"
+
 [profile.dev]
 # Rust debug is too slow. 
 # For debug builds always builds with some optimization
 opt-level = "s"
 
 [profile.release]
-codegen-units = 1 # LLVM can perform better optimizations using a single thread
+codegen-units = 1        # LLVM can perform better optimizations using a single thread
 debug = 2
 debug-assertions = false
 incremental = false
