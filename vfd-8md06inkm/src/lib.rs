@@ -42,7 +42,7 @@ pub struct Vfd8md06inkm<'d, SPI, R, E, D> {
 
 impl<'d, SPI, R, E, D> Vfd8md06inkm<'d, SPI, R, E, D>
 where
-    SPI: embedded_hal::spi::SpiDevice,
+    SPI: embedded_hal_async::spi::SpiDevice,
     R: embedded_hal::digital::OutputPin,
     E: embedded_hal::digital::OutputPin,
     D: embedded_hal::delay::DelayNs,
@@ -56,26 +56,27 @@ where
             buffer,
         }
     }
-    fn trans_delay() -> u32 {
-        // 40_000
-        0
-    }
+    // fn trans_delay() -> u32 {
+    //     // 40_000
+    //     0
+    // }
     pub fn digits(&self) -> usize {
         self.buffer.len() / 5
     }
-    pub fn write_reg<C>(&mut self, cmd: C, data: u8) -> Result<()>
+    pub async fn write_reg<C>(&mut self, cmd: C, data: u8) -> Result<()>
     where
         C: Into<u8>,
     {
         self.spi
             .transaction(&mut [
                 Operation::Write(&[reverse_bits(cmd.into()), reverse_bits(data)]),
-                Operation::DelayNs(Self::trans_delay()),
+                // Operation::DelayNs(Self::trans_delay()),
             ])
+            .await
             .map_err(|_| display_interface::DisplayError::BusWriteError)?;
         Ok(())
     }
-    pub fn write_data<C>(&mut self, cmd: C, data: &[u8]) -> Result<()>
+    pub async fn write_data<C>(&mut self, cmd: C, data: &[u8]) -> Result<()>
     where
         C: Into<u8>,
     {
@@ -88,12 +89,13 @@ where
         self.spi
             .transaction(&mut [
                 Operation::Write(&buf[..data.len() + 1]),
-                Operation::DelayNs(Self::trans_delay()),
+                // Operation::DelayNs(Self::trans_delay()),
             ])
+            .await
             .map_err(|_| display_interface::DisplayError::BusWriteError)?;
         Ok(())
     }
-    pub fn init(&mut self) -> Result<()> {
+    pub async fn init(&mut self) -> Result<()> {
         self.enabled
             .set_high()
             .map_err(|_| display_interface::DisplayError::RSError)?;
@@ -107,25 +109,27 @@ where
         self.delay.delay_ms(1);
 
         use Commands::*;
-        self.write_reg(SetDisplayTiming, self.digits() as u8 - 1)?;
-        self.write_reg(SetDimmingData, 31)?;
-        self.write_reg(SetDisplayOn, 0)?;
+        self.write_reg(SetDisplayTiming, self.digits() as u8 - 1)
+            .await?;
+        self.write_reg(SetDimmingData, 31).await?;
+        self.write_reg(SetDisplayOn, 0).await?;
         Ok(())
     }
-    pub fn clear(&mut self) -> Result<()> {
+    pub async fn clear(&mut self) -> Result<()> {
         for d in 0..self.digits() {
             let addr = d as u8 + Commands::DCramDataWrite as u8;
-            self.write_reg(addr, Commands::DGramDataClear.into())?;
+            self.write_reg(addr, Commands::DGramDataClear.into())
+                .await?;
         }
         Ok(())
     }
-    pub fn write_str(&mut self, start: u8, s: &str) -> Result<()> {
+    pub async fn write_str(&mut self, start: u8, s: &str) -> Result<()> {
         if start > self.digits() as u8 {
             return Err(display_interface::DisplayError::OutOfBoundsError);
         }
         let s = &s.as_bytes()[..(s.len().min(self.digits() - start as usize))];
         let addr = start + Commands::DCramDataWrite as u8;
-        self.write_data(addr, s)?;
+        self.write_data(addr, s).await?;
         Ok(())
     }
 }

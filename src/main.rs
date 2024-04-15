@@ -1,19 +1,20 @@
 #![no_std]
 #![no_main]
 
-use core::cell::RefCell;
-
-use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
+use embassy_embedded_hal::shared_bus::asynch::spi::SpiDevice;
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::NoopMutex;
+use embassy_sync::blocking_mutex::raw::NoopRawMutex;
+use embassy_sync::mutex::Mutex;
 use embedded_hal::delay::DelayNs;
 use esp_backtrace as _;
-use esp_hal::embassy;
+use esp_hal::dma::{Dma, DmaPriority};
+use esp_hal::spi::master::prelude::*;
 use esp_hal::spi::master::Spi;
 use esp_hal::spi::SpiMode;
 use esp_hal::timer::TimerGroup;
 use esp_hal::IO;
 use esp_hal::{clock::ClockControl, peripherals::Peripherals, prelude::*, Delay};
+use esp_hal::{dma_descriptors, embassy};
 use esp_hal::{systimer::SystemTimer, Rng};
 use esp_wifi::{initialize, EspWifiInitFor};
 use log::*;
@@ -47,6 +48,10 @@ async fn main(_spawner: Spawner) {
     let en = io.pins.gpio5.into_push_pull_output();
     let cs = io.pins.gpio7.into_push_pull_output();
 
+    let dma = Dma::new(peripherals.DMA);
+    let dma_channel = dma.channel0;
+    let (mut descriptors, mut rx_descriptors) = dma_descriptors!(512);
+
     let spi = Spi::new(
         peripherals.SPI2,
         fugit::HertzU32::kHz(100),
@@ -54,18 +59,21 @@ async fn main(_spawner: Spawner) {
         &clocks,
     )
     .with_sck(sclk)
-    .with_mosi(mosi);
+    .with_mosi(mosi)
+    .with_dma(dma_channel.configure(
+        false,
+        &mut descriptors,
+        &mut rx_descriptors,
+        DmaPriority::Priority0,
+    ));
 
-    let spi_mutex = NoopMutex::new(RefCell::new(spi));
+    let spi_mutex = Mutex::<NoopRawMutex, _>::new(spi);
     let spi_device = SpiDevice::new(&spi_mutex, cs);
     let mut buffer = [0u8; 8 * 5];
     let mut vfd = vfd_8md06inkm::Vfd8md06inkm::new(spi_device, res, en, delay, &mut buffer);
-    vfd.init().unwrap();
-    // vfd.clear().unwrap();
     loop {
-        // vfd.init().unwrap();
-        // vfd.clear().unwrap();
-        vfd.write_str(0, "TEST").unwrap();
+        vfd.init().await.unwrap();
+        vfd.write_str(0, "TEST").await.unwrap();
         DelayNs::delay_ms(&mut delay, 1000);
     }
 }
