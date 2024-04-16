@@ -34,15 +34,24 @@ const fn reverse_bits(x: u8) -> u8 {
 pub type Result<T> = core::result::Result<T, display_interface::DisplayError>;
 
 pub struct Vfd8md06inkm<'d, SPI, R, E, D> {
+    digits: usize,
     spi: SPI,
     reset: R,
     enabled: E,
     delay: D,
-    buffer: &'d mut [u8],
+    buffer: Option<&'d mut [u8]>,
 }
 impl<'d, SPI, R, E, D> Vfd8md06inkm<'d, SPI, R, E, D> {
-    pub fn new(spi: SPI, reset: R, enabled: E, delay: D, buffer: &'d mut [u8]) -> Self {
+    pub fn new(
+        digits: usize,
+        spi: SPI,
+        reset: R,
+        enabled: E,
+        delay: D,
+        buffer: Option<&'d mut [u8]>,
+    ) -> Self {
         Self {
+            digits,
             spi,
             reset,
             enabled,
@@ -50,14 +59,20 @@ impl<'d, SPI, R, E, D> Vfd8md06inkm<'d, SPI, R, E, D> {
             buffer,
         }
     }
-    pub const fn digits(&self) -> usize {
-        self.buffer.len() / 5
+    pub fn digits(&self) -> usize {
+        if let Some(buffer) = &self.buffer {
+            (buffer.len() / 5).min(self.digits)
+        } else {
+            self.digits
+        }
     }
     pub fn trans_delay_ns() -> u32 {
         4_000
     }
     pub fn clear_buffer(&mut self) {
-        self.buffer.iter_mut().for_each(|b| *b = 0);
+        if let Some(buffer) = self.buffer.as_mut() {
+            buffer.iter_mut().for_each(|b| *b = 0);
+        }
     }
 }
 
@@ -134,20 +149,20 @@ where
         Ok(())
     }
     pub fn flush(&mut self) -> Result<()> {
-        let digits = self.digits();
-        for i in 0..digits {
-            let addr = i as u8 + Commands::CGramDataWrite as u8;
-            let mut buf = [0u8; 5];
-            buf.copy_from_slice(&self.buffer[(i * 5)..(i * 5) + 5]);
-            self.write_data(addr, &buf)?;
+        if self.buffer.is_some() {
+            let digits = self.digits();
+            for i in 0..digits {
+                let addr = i as u8 + Commands::CGramDataWrite as u8;
+                let mut buf = [0u8; 5];
+                buf.copy_from_slice(&self.buffer.as_ref().unwrap()[(i * 5)..(i * 5) + 5]);
+                self.write_data(addr, &buf)?;
+            }
+            let indexes: [u8; 16] = core::array::from_fn(|i| i as u8);
+            self.write_data(Commands::DCramDataWrite, &indexes[..digits])?;
+            Ok(())
+        } else {
+            Err(display_interface::DisplayError::DataFormatNotImplemented)
         }
-        let indexes: [u8; 16] = core::array::from_fn(|i| i as u8);
-        self.write_data(Commands::DCramDataWrite, &indexes[..digits])?;
-        // for i in 0..digits {
-        //     let addr = i as u8 + Commands::DCramDataWrite as u8;
-        //     self.write_reg(addr, i as u8)?;
-        // }
-        Ok(())
     }
 }
 
@@ -228,17 +243,21 @@ where
         Ok(())
     }
     pub async fn flush_async(&mut self) -> Result<()> {
-        let digits = self.digits();
-        for d in 0..digits {
-            let addr = d as u8 + Commands::CGramDataWrite as u8;
-            let mut buf = [0u8; 5];
-            buf.copy_from_slice(&self.buffer[(d * 5)..(d * 5) + 5]);
-            self.write_data_async(addr, &buf).await?;
+        if self.buffer.is_some() {
+            let digits = self.digits();
+            for i in 0..digits {
+                let addr = i as u8 + Commands::CGramDataWrite as u8;
+                let mut buf = [0u8; 5];
+                buf.copy_from_slice(&self.buffer.as_ref().unwrap()[(i * 5)..(i * 5) + 5]);
+                self.write_data_async(addr, &buf).await?;
+            }
+            let indexes: [u8; 16] = core::array::from_fn(|i| i as u8);
+            self.write_data_async(Commands::DCramDataWrite, &indexes[..digits])
+                .await?;
+            Ok(())
+        } else {
+            Err(display_interface::DisplayError::DataFormatNotImplemented)
         }
-        let indexes: [u8; 16] = core::array::from_fn(|i| i as u8);
-        self.write_data_async(Commands::DCramDataWrite, &indexes[..digits])
-            .await?;
-        Ok(())
     }
 }
 
@@ -268,18 +287,22 @@ where
         I: IntoIterator<Item = embedded_graphics_core::Pixel<Self::Color>>,
     {
         // write to buffer then flush
-        for pixel in pixels {
-            let x = pixel.0.x as usize;
-            let y = pixel.0.y as usize;
-            let i = x / 5;
-            let j = x % 5;
-            let b = &mut self.buffer[i * 5 + j];
-            if y < 7 {
-                *b |= 1 << y;
+        if let Some(buffer) = self.buffer.as_mut() {
+            for pixel in pixels {
+                let x = pixel.0.x as usize;
+                let y = pixel.0.y as usize;
+                let b = &mut buffer[x];
+                if y < 7 {
+                    if pixel.1.is_on() {
+                        *b |= 1 << y;
+                    } else {
+                        *b &= !(1 << y);
+                    }
+                }
             }
+            // self.buffer.iter_mut().for_each(|b| *b = 0x55);
+            self.flush()?;
         }
-        // self.buffer.iter_mut().for_each(|b| *b = 0x55);
-        self.flush()?;
         Ok(())
     }
 }

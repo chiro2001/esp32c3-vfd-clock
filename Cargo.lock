@@ -599,6 +599,7 @@ dependencies = [
  "esp-hal",
  "esp-println",
  "esp-wifi",
+ "format_no_std",
  "fugit",
  "heapless",
  "log",
@@ -672,6 +673,12 @@ name = "fnv"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
+
+[[package]]
+name = "format_no_std"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84733208a537234e0baafab6b69e3ffd8e10ad6aeb02e79eea32531eb017e8d2"
 
 [[package]]
 name = "fugit"

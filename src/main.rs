@@ -96,31 +96,37 @@ async fn main(_spawner: Spawner) {
     let spi_mutex = NoopMutex::new(RefCell::new(spi));
     let spi_device =
         embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice::new(&spi_mutex, cs);
-    let mut buffer = [0u8; 8 * 5];
-    let mut vfd = vfd_8md06inkm::Vfd8md06inkm::new(spi_device, res, en, delay, &mut buffer);
+    // let mut buffer = [0u8; 8 * 5];
+    let mut vfd = vfd_8md06inkm::Vfd8md06inkm::new(8, spi_device, res, en, delay, None);
     // loop {
     //     vfd.init().unwrap();
     //     vfd.write_str(0, "TEST").unwrap();
     //     DelayNs::delay_ms(&mut delay, 1000);
     // }
     info!("digits {}", vfd.digits());
+    let mut cnt = 0;
+    // vfd.init().unwrap();
     loop {
         vfd.init().unwrap();
-        vfd.clear_buffer();
+        // vfd.clear_buffer();
         // vfd.write_str(0, "TEST").unwrap();
-        // DelayNs::delay_ms(&mut delay, 100);
-        Rectangle::new(Point::zero(), Size::new(5 * 2, 7))
-            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
-            .draw(&mut vfd)
-            .unwrap();
-        Text::new(
-            "-TEST-",
-            Point::new(11, 0),
-            MonoTextStyle::new(&ascii::FONT_5X7, BinaryColor::On),
-        )
-        .draw(&mut vfd)
-        .unwrap();
-        // DelayNs::delay_ms(&mut delay, 1000);
-        DelayNs::delay_ms(&mut delay, 10);
+        let mut buf = [0u8; 16];
+        let s = format_no_std::show(&mut buf, format_args!("[{}]", cnt)).unwrap();
+        vfd.write_str(0, s).unwrap();
+        cnt += 1;
+        DelayNs::delay_ms(&mut delay, 100);
+        // Rectangle::new(Point::zero(), Size::new(5 * 2, 7))
+        //     .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+        //     .draw(&mut vfd)
+        //     .unwrap();
+        // Text::new(
+        //     "-TEST-",
+        //     Point::new(11, 0),
+        //     MonoTextStyle::new(&ascii::FONT_5X7, BinaryColor::On),
+        // )
+        // .draw(&mut vfd)
+        // .unwrap();
+        // // DelayNs::delay_ms(&mut delay, 1000);
+        // DelayNs::delay_ms(&mut delay, 10);
     }
 }
