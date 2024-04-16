@@ -67,7 +67,12 @@ impl<'d, SPI, R, E, D> Vfd8md06inkm<'d, SPI, R, E, D> {
         }
     }
     pub fn trans_delay_ns() -> u32 {
-        4_000
+        // 4_000
+        // 0
+        // 1_000_000
+        // 4_000_000
+        100_000
+        // 100_000_000
     }
     pub fn clear_buffer(&mut self) {
         if let Some(buffer) = self.buffer.as_mut() {
